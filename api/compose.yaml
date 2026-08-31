@@ -1,0 +1,26 @@
+services:
+  stoneperms-api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3210:3210"
+    environment:
+      STONEPERMS_HOST: 0.0.0.0
+      STONEPERMS_PORT: 3210
+      STONEPERMS_DATABASE: /app/data/stoneperms-api.db
+      STONEPERMS_PUBLIC_URL: ${STONEPERMS_PUBLIC_URL:-http://127.0.0.1:3210}
+      STONEPERMS_ALLOWED_ORIGINS: ${STONEPERMS_ALLOWED_ORIGINS:-http://127.0.0.1:3210}
+      STONEPERMS_COOKIE_SECURE: ${STONEPERMS_COOKIE_SECURE:-false}
+      STONEPERMS_TRUST_PROXY: ${STONEPERMS_TRUST_PROXY:-false}
+      STONEPERMS_AVATAR_PROVIDER_URL: ${STONEPERMS_AVATAR_PROVIDER_URL:-https://api.mcheads.org}
+      STONEPERMS_AVATAR_REQUEST_TIMEOUT_MS: ${STONEPERMS_AVATAR_REQUEST_TIMEOUT_MS:-5000}
+      STONEPERMS_REGISTRATION_ENABLED: ${STONEPERMS_REGISTRATION_ENABLED:-false}
+      STONEPERMS_BOOTSTRAP_USERNAME: ${STONEPERMS_BOOTSTRAP_USERNAME:-admin}
+      STONEPERMS_BOOTSTRAP_PASSWORD: ${STONEPERMS_BOOTSTRAP_PASSWORD:?Set STONEPERMS_BOOTSTRAP_PASSWORD in api/.env}
+    volumes:
+      - stoneperms-api-data:/app/data
+
+volumes:
+  stoneperms-api-data:
