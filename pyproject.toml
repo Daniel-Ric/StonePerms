@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "endstone-stoneperms"
+version = "0.8.11"
+description = "Permissions, groups, tracks, prefixes, and suffixes for Endstone"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "StonePerms contributors" }]
+keywords = ["bedrock", "endstone", "minecraft", "permissions"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = ["websocket-client>=1.8,<2"]
+
+[project.optional-dependencies]
+dev = ["build>=1.2", "endstone>=0.11,<0.12", "ruff>=0.9"]
+
+[project.entry-points."endstone"]
+stoneperms = "endstone_stoneperms:StonePermsPlugin"
+
+[project.urls]
+Documentation = "https://endstone.dev/latest/"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/endstone_stoneperms"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/endstone_stoneperms/config.toml" = "endstone_stoneperms/config.toml"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/README.md",
+    "/pyproject.toml",
+    "/src",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]
