@@ -1,0 +1,39 @@
+{
+  "name": "@stoneperms/dashboard",
+  "version": "0.8.11",
+  "description": "Web dashboard and permission editor for StonePerms",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:host": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write --ignore-unknown",
+    "format:check": "prettier . --check --ignore-unknown",
+    "check": "npm run lint && npm run format:check && npm run build"
+  },
+  "dependencies": {
+    "axios": "^1.19.0",
+    "echarts": "^6.1.0",
+    "gsap": "^3.15.0",
+    "pinia": "^4.0.2",
+    "vue": "^3.5.40",
+    "vue-router": "^5.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-vue": "^10.10.0",
+    "globals": "^17.11.0",
+    "prettier": "3.9.6",
+    "vite": "^8.1.5"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
