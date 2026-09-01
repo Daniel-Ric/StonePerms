@@ -55,37 +55,53 @@ class RevisionConflictError(RuntimeError):
 
 class PermissionRepository(Protocol):
     @property
-    def revision(self) -> int: ...
+    def revision(self) -> int:
+        pass
 
-    def initialize(self, default_group: str) -> None: ...
+    def initialize(self, default_group: str) -> None:
+        pass
 
-    def close(self) -> None: ...
+    def close(self) -> None:
+        pass
 
-    def upsert_user(self, user: UserRecord) -> None: ...
+    def upsert_user(self, user: UserRecord) -> None:
+        pass
 
-    def find_user(self, identifier: str) -> UserRecord | None: ...
+    def find_user(self, identifier: str) -> UserRecord | None:
+        pass
 
-    def list_users(self) -> tuple[UserRecord, ...]: ...
+    def list_users(self) -> tuple[UserRecord, ...]:
+        pass
 
-    def upsert_player_profile(self, profile: PlayerProfile) -> PlayerProfile: ...
+    def upsert_player_profile(self, profile: PlayerProfile) -> PlayerProfile:
+        pass
 
-    def get_player_profile(self, identifier: str) -> PlayerProfile | None: ...
+    def get_player_profile(self, identifier: str) -> PlayerProfile | None:
+        pass
 
-    def list_player_profiles(self) -> tuple[PlayerProfile, ...]: ...
+    def list_player_profiles(self) -> tuple[PlayerProfile, ...]:
+        pass
 
-    def create_group(self, group: GroupRecord, actor: str) -> bool: ...
+    def create_group(self, group: GroupRecord, actor: str) -> bool:
+        pass
 
-    def get_group(self, name: str) -> GroupRecord | None: ...
+    def get_group(self, name: str) -> GroupRecord | None:
+        pass
 
-    def list_groups(self) -> tuple[GroupRecord, ...]: ...
+    def list_groups(self) -> tuple[GroupRecord, ...]:
+        pass
 
-    def set_group_weight(self, name: str, weight: int, actor: str) -> None: ...
+    def set_group_weight(self, name: str, weight: int, actor: str) -> None:
+        pass
 
-    def create_track(self, track: TrackRecord, actor: str, action: str = "track.create") -> bool: ...
+    def create_track(self, track: TrackRecord, actor: str, action: str = "track.create") -> bool:
+        pass
 
-    def get_track(self, name: str) -> TrackRecord | None: ...
+    def get_track(self, name: str) -> TrackRecord | None:
+        pass
 
-    def list_tracks(self) -> tuple[TrackRecord, ...]: ...
+    def list_tracks(self) -> tuple[TrackRecord, ...]:
+        pass
 
     def set_track_groups(
         self,
@@ -94,13 +110,17 @@ class PermissionRepository(Protocol):
         actor: str,
         action: str,
         details: dict[str, Any],
-    ) -> TrackRecord: ...
+    ) -> TrackRecord:
+        pass
 
-    def rename_track(self, name: str, new_name: str, actor: str) -> bool: ...
+    def rename_track(self, name: str, new_name: str, actor: str) -> bool:
+        pass
 
-    def delete_track(self, name: str, actor: str) -> bool: ...
+    def delete_track(self, name: str, actor: str) -> bool:
+        pass
 
-    def save_node(self, node: Node, actor: str, action: str) -> Node: ...
+    def save_node(self, node: Node, actor: str, action: str) -> Node:
+        pass
 
     def remove_nodes(
         self,
@@ -113,7 +133,8 @@ class PermissionRepository(Protocol):
         *,
         temporary: bool | None = None,
         priority: int | None = None,
-    ) -> int: ...
+    ) -> int:
+        pass
 
     def replace_parent_node(
         self,
@@ -122,7 +143,8 @@ class PermissionRepository(Protocol):
         actor: str,
         action: str,
         details: dict[str, Any],
-    ) -> Node | None: ...
+    ) -> Node | None:
+        pass
 
     def apply_editor_batch(
         self,
@@ -131,14 +153,20 @@ class PermissionRepository(Protocol):
         track_changes: tuple[EditorTrackChange, ...],
         actor: str,
         session_id: str,
-    ) -> EditorStorageResult: ...
+    ) -> EditorStorageResult:
+        pass
 
-    def nodes_for(self, subject: SubjectRef, *, include_expired: bool = True) -> tuple[Node, ...]: ...
+    def nodes_for(self, subject: SubjectRef, *, include_expired: bool = True) -> tuple[Node, ...]:
+        pass
 
-    def load_snapshot(self, user: SubjectRef, default_group: str) -> PermissionSnapshot: ...
+    def load_snapshot(self, user: SubjectRef, default_group: str) -> PermissionSnapshot:
+        pass
 
-    def delete_expired(self, timestamp: int) -> ExpiredNodes: ...
+    def delete_expired(self, timestamp: int) -> ExpiredNodes:
+        pass
 
-    def recent_audit(self, limit: int = 20) -> tuple[dict[str, object], ...]: ...
+    def recent_audit(self, limit: int = 20) -> tuple[dict[str, object], ...]:
+        pass
 
-    def record_audit(self, actor: str, action: str, details: dict[str, Any]) -> None: ...
+    def record_audit(self, actor: str, action: str, details: dict[str, Any]) -> None:
+        pass

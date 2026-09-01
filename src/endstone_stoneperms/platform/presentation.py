@@ -13,9 +13,11 @@ DETAIL_PREFIX = f"{SYMBOL}  >"
 
 
 class MessageTarget(Protocol):
-    def send_message(self, message: str) -> None: ...
+    def send_message(self, message: str) -> None:
+        pass
 
-    def send_error_message(self, message: str) -> None: ...
+    def send_error_message(self, message: str) -> None:
+        pass
 
 
 def send_error(target: MessageTarget, message: str, hint: str) -> None:
