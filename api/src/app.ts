@@ -98,7 +98,7 @@ export async function buildApp(config: ApiConfig): Promise<StonePermsApi> {
     openapi: {
       info: {
         title: "StonePerms API",
-        version: "0.8.11",
+        version: "0.8.12",
         description: "API and live bridge for the StonePerms dashboard and Endstone plugin",
       },
       components: {

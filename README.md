@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="StonePerms 0.8.11" src="https://img.shields.io/badge/StonePerms-0.8.11-d8d58d?style=flat-square">
+  <img alt="StonePerms 0.8.12" src="https://img.shields.io/badge/StonePerms-0.8.12-d8d58d?style=flat-square">
   <a href="https://endstone.dev/"><img alt="Endstone 0.11" src="https://img.shields.io/badge/Endstone-0.11-d8d58d?style=flat-square"></a>
   <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/Python-3.11%2B-68737a?style=flat-square&logo=python&logoColor=white">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-68737a?style=flat-square"></a>

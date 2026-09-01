@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="StonePerms dashboard 0.8.11" src="https://img.shields.io/badge/Dashboard-0.8.11-d8d58d?style=flat-square">
+  <img alt="StonePerms dashboard 0.8.12" src="https://img.shields.io/badge/Dashboard-0.8.12-d8d58d?style=flat-square">
   <img alt="Vue 3" src="https://img.shields.io/badge/Vue-3-68737a?style=flat-square&logo=vuedotjs&logoColor=white">
   <img alt="Vite 8" src="https://img.shields.io/badge/Vite-8-68737a?style=flat-square&logo=vite&logoColor=white">
   <a href="../LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-68737a?style=flat-square"></a>

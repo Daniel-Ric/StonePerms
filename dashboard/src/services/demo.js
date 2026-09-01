@@ -25,7 +25,7 @@ const state = {
       id: serverId,
       instanceId: '4e2b74cb-41ca-4b7c-ad93-7def73bccd14',
       name: 'Survival Network',
-      pluginVersion: '0.8.11',
+      pluginVersion: '0.8.12',
       protocolVersion: 1,
       createdAt: now - 1209600,
       lastSeenAt: now - 3,
@@ -37,7 +37,7 @@ const state = {
       id: secondServerId,
       instanceId: 'd989d008-4d26-4501-a97d-ab9b262183f7',
       name: 'Creative Lab',
-      pluginVersion: '0.8.11',
+      pluginVersion: '0.8.12',
       protocolVersion: 1,
       createdAt: now - 432000,
       lastSeenAt: now - 14,
@@ -168,7 +168,7 @@ function editorSession(users = []) {
     scope: { users, groups: true, tracks: true },
     metadata: {
       product: 'StonePerms',
-      productVersion: '0.8.11',
+      productVersion: '0.8.12',
       defaultGroup: 'default',
       groups: [
         { name: 'default', displayName: 'Default', weight: 0 },
