@@ -689,6 +689,12 @@ class StonePermsWebConnector:
                 _integer(payload["weight"], "weight", -(2**31), 2**31 - 1),
                 actor=actor,
             )
+        if action == "group.delete":
+            _exact_keys(payload, {"name"})
+            return self._service.delete_web_group(
+                _required_text(payload["name"], "name", 64),
+                actor=actor,
+            )
         raise ValueError(f"Unsupported web action {action!r}")
 
     def _handle_track_request(

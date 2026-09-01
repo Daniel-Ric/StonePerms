@@ -1,5 +1,5 @@
 import { hashPassword, randomToken, tokenDigest, verifyPassword } from "../crypto.js";
-import { conflict, forbidden, unauthorized } from "../errors.js";
+import { badRequest, conflict, forbidden, unauthorized } from "../errors.js";
 import type { ApiRouteContext } from "../http.js";
 import {
   normalizeLoginCode,
@@ -120,18 +120,94 @@ export async function registerAuthRoutes(context: ApiRouteContext): Promise<void
       config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
       schema: {
         tags: ["auth"],
-        body: object({ code: { type: "string", minLength: 8, maxLength: 19 } }, ["code"]),
+        body: object(
+          {
+            code: { type: "string", minLength: 8, maxLength: 19 },
+            accountMode: { type: "string", enum: ["create", "existing"] },
+            username: { type: "string", pattern: USERNAME_PATTERN },
+            password: { type: "string", minLength: 1, maxLength: 1024 },
+          },
+          ["code"],
+        ),
       },
     },
     async (request, reply) => {
-      const body = request.body as { code: string };
+      const body = request.body as {
+        code: string;
+        accountMode?: "create" | "existing";
+        username?: string;
+        password?: string;
+      };
       const codeHash = tokenDigest(normalizeLoginCode(body.code));
-      let result = database.consumeLoginCode(codeHash);
+      const activeLogin = database.findActiveLoginCode(codeHash);
+      const legacyUpgrade = Boolean(
+        activeLogin && database.isLegacyAccount(activeLogin.user.id, activeLogin.serverId),
+      );
+      let result = null;
       let claimedServer = false;
+      let upgradedLegacyAccount = false;
+      if (activeLogin && legacyUpgrade) {
+        if (!body.accountMode) return { accountSetupRequired: true, legacyUpgrade: true };
+        if (!body.username || !body.password) {
+          throw badRequest(
+            "ACCOUNT_CREDENTIALS_REQUIRED",
+            "Username and password are required to recover this legacy account",
+          );
+        }
+        const user = database.findUserByUsername(body.username);
+        if (body.accountMode === "existing") {
+          const passwordMatches = await verifyPassword(
+            body.password,
+            user?.passwordHash ?? dummyPasswordHash,
+          );
+          if (!user || user.disabledAt !== null || !passwordMatches) {
+            throw unauthorized("Username or password is incorrect");
+          }
+          result = database.consumeLegacyLoginCode(codeHash, { userId: user.id });
+        } else {
+          if (body.password.length < 12) {
+            throw badRequest("PASSWORD_TOO_SHORT", "Password must contain at least 12 characters");
+          }
+          if (user && user.id !== activeLogin.user.id) {
+            throw conflict("USERNAME_EXISTS", "Username already exists");
+          }
+          result = database.consumeLegacyLoginCode(codeHash, {
+            username: body.username,
+            passwordHash: await hashPassword(body.password),
+          });
+        }
+        upgradedLegacyAccount = result !== null;
+      } else if (activeLogin) {
+        result = database.consumeLoginCode(codeHash);
+      }
       if (!result && database.hasActiveServerClaimCode(codeHash)) {
-        const username = `server-${randomToken("", 6)}`;
-        const passwordHash = await hashPassword(randomToken("sp_password_"));
-        result = database.consumeServerClaimCode(codeHash, username, passwordHash);
+        if (!body.accountMode) return { accountSetupRequired: true };
+        if (!body.username || !body.password) {
+          throw badRequest(
+            "ACCOUNT_CREDENTIALS_REQUIRED",
+            "Username and password are required to claim this server",
+          );
+        }
+        const user = database.findUserByUsername(body.username);
+        if (body.accountMode === "existing") {
+          const passwordMatches = await verifyPassword(
+            body.password,
+            user?.passwordHash ?? dummyPasswordHash,
+          );
+          if (!user || user.disabledAt !== null || !passwordMatches) {
+            throw unauthorized("Username or password is incorrect");
+          }
+          result = database.consumeServerClaimCode(codeHash, { userId: user.id });
+        } else {
+          if (body.password.length < 12) {
+            throw badRequest("PASSWORD_TOO_SHORT", "Password must contain at least 12 characters");
+          }
+          if (user) throw conflict("USERNAME_EXISTS", "Username already exists");
+          result = database.consumeServerClaimCode(codeHash, {
+            username: body.username,
+            passwordHash: await hashPassword(body.password),
+          });
+        }
         claimedServer = result !== null;
       }
       if (!result) {
@@ -152,10 +228,20 @@ export async function registerAuthRoutes(context: ApiRouteContext): Promise<void
       database.audit(
         result.user.id,
         result.serverId,
-        claimedServer ? "auth.code.claim" : "auth.code.login",
+        upgradedLegacyAccount
+          ? "auth.code.legacy.upgrade"
+          : claimedServer
+            ? "auth.code.claim.setup"
+            : "auth.code.login",
         null,
       );
-      return { user: publicUser(result.user), csrfToken, expiresAt, claimedServer };
+      return {
+        user: publicUser(result.user),
+        csrfToken,
+        expiresAt,
+        claimedServer,
+        legacyUpgrade: upgradedLegacyAccount,
+      };
     },
   );
 

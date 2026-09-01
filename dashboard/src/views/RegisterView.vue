@@ -59,7 +59,7 @@ async function submit() {
             required
             minlength="3"
             maxlength="32"
-            pattern="[A-Za-z0-9_.-]+"
+            pattern="[-A-Za-z0-9_.]+"
           />
         </div>
         <div class="field">

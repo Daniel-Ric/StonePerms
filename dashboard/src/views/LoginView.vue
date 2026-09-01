@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import { useStonePermsStore } from '@/stores/stoneperms'
@@ -11,15 +11,52 @@ const method = ref(!store.demoMode && route.query.method === 'code' ? 'code' : '
 const username = ref(store.demoMode ? 'demo' : '')
 const password = ref(store.demoMode ? 'stoneperms-demo' : '')
 const code = ref('')
+const claimSetup = ref(false)
+const claimLegacy = ref(false)
+const claimMode = ref('create')
+const claimUsername = ref('')
+const claimPassword = ref('')
+const claimPasswordConfirmation = ref('')
 const loading = ref(false)
 const error = ref('')
+const submitLabel = computed(() => {
+  if (loading.value) return 'Signing in…'
+  if (method.value !== 'code') return 'Sign in'
+  if (!claimSetup.value) return 'Continue'
+  if (claimLegacy.value)
+    return claimMode.value === 'create' ? 'Save credentials and sign in' : 'Transfer and sign in'
+  return claimMode.value === 'create' ? 'Create account and connect' : 'Sign in and connect'
+})
 
 async function submit() {
   loading.value = true
   error.value = ''
   try {
-    if (method.value === 'code') await store.loginWithCode(code.value)
-    else await store.login(username.value.trim(), password.value)
+    if (method.value === 'code') {
+      if (
+        claimSetup.value &&
+        claimMode.value === 'create' &&
+        claimPassword.value !== claimPasswordConfirmation.value
+      ) {
+        error.value = 'The passwords do not match.'
+        return
+      }
+      const result = await store.loginWithCode(
+        code.value,
+        claimSetup.value
+          ? {
+              accountMode: claimMode.value,
+              username: claimUsername.value.trim(),
+              password: claimPassword.value,
+            }
+          : null,
+      )
+      if (result.accountSetupRequired) {
+        claimSetup.value = true
+        claimLegacy.value = Boolean(result.legacyUpgrade)
+        return
+      }
+    } else await store.login(username.value.trim(), password.value)
     const destination = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
     await router.replace(destination)
   } catch (cause) {
@@ -31,6 +68,25 @@ async function submit() {
 
 function selectMethod(value) {
   method.value = value
+  claimSetup.value = false
+  claimLegacy.value = false
+  error.value = ''
+}
+
+function selectClaimMode(value) {
+  claimMode.value = value
+  claimPassword.value = ''
+  claimPasswordConfirmation.value = ''
+  error.value = ''
+}
+
+function resetClaimCode() {
+  claimSetup.value = false
+  claimLegacy.value = false
+  code.value = ''
+  claimUsername.value = ''
+  claimPassword.value = ''
+  claimPasswordConfirmation.value = ''
   error.value = ''
 }
 
@@ -61,7 +117,11 @@ function updateCode(event) {
         <p>
           {{
             method === 'code'
-              ? 'Enter the code from /stoneperms web login.'
+              ? claimSetup
+                ? claimLegacy
+                  ? 'Recover this legacy login with permanent credentials or transfer its server.'
+                  : 'Choose permanent credentials or connect the server to an existing account.'
+                : 'Enter the code from /stoneperms web login.'
               : 'Sign in to pair a server or manage your account.'
           }}
         </p>
@@ -120,17 +180,87 @@ function updateCode(event) {
             autocapitalize="characters"
             spellcheck="false"
             required
+            :readonly="claimSetup"
             maxlength="19"
             placeholder="ABCD-EFGH-JKLM-NPQR"
             @input="updateCode"
           />
           <small>Run /stoneperms web login in the Endstone server console.</small>
         </div>
+        <div v-if="method === 'code' && claimSetup" class="login-claim-setup">
+          <div class="login-claim-heading">
+            <div>
+              <strong>{{ claimLegacy ? 'Recover legacy access' : 'Secure this server' }}</strong>
+              <small>{{
+                claimLegacy
+                  ? 'This server still uses an account without known credentials.'
+                  : 'The one-time code verified the server. Its account needs permanent access.'
+              }}</small>
+            </div>
+            <button type="button" class="login-text-action" @click="resetClaimCode">
+              Change code
+            </button>
+          </div>
+          <div class="login-methods" role="tablist" aria-label="Server account choice">
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="claimMode === 'create'"
+              :class="{ 'is-active': claimMode === 'create' }"
+              @click="selectClaimMode('create')"
+            >
+              {{ claimLegacy ? 'Set credentials' : 'New account' }}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="claimMode === 'existing'"
+              :class="{ 'is-active': claimMode === 'existing' }"
+              @click="selectClaimMode('existing')"
+            >
+              Existing account
+            </button>
+          </div>
+          <div class="field">
+            <label for="claim-username">Username</label>
+            <input
+              id="claim-username"
+              v-model.trim="claimUsername"
+              autocomplete="username"
+              required
+              minlength="3"
+              maxlength="32"
+              pattern="[-A-Za-z0-9_.]{3,32}"
+            />
+            <small>Use 3–32 letters, numbers, dots, underscores, or hyphens.</small>
+          </div>
+          <div class="field">
+            <label for="claim-password">Password</label>
+            <input
+              id="claim-password"
+              v-model="claimPassword"
+              type="password"
+              :autocomplete="claimMode === 'create' ? 'new-password' : 'current-password'"
+              required
+              :minlength="claimMode === 'create' ? 12 : 1"
+            />
+            <small v-if="claimMode === 'create'">Use at least 12 characters.</small>
+          </div>
+          <div v-if="claimMode === 'create'" class="field">
+            <label for="claim-password-confirmation">Confirm password</label>
+            <input
+              id="claim-password-confirmation"
+              v-model="claimPasswordConfirmation"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="12"
+            />
+          </div>
+        </div>
         <p v-if="error" class="form-error" role="alert">{{ error }}</p>
         <button class="button primary full" type="submit" :disabled="loading">
-          <AppIcon :name="loading ? 'refresh' : 'lock'" />{{
-            loading ? 'Signing in…' : method === 'code' ? 'Use code' : 'Sign in'
-          }}
+          <AppIcon :name="loading ? 'refresh' : 'lock'" />{{ submitLabel }}
         </button>
         <p v-if="method === 'code'" class="login-alternate">
           Prefer an account?
@@ -147,7 +277,11 @@ function updateCode(event) {
         <div class="login-security">
           <AppIcon name="shield" /><span>{{
             method === 'code'
-              ? 'The code works once, connects a new server when needed, and expires after a few minutes.'
+              ? claimSetup
+                ? claimLegacy
+                  ? 'Saving credentials upgrades the legacy account without changing server data.'
+                  : 'The server is connected only after its account credentials are confirmed.'
+                : 'The code works once and expires after a few minutes.'
               : "Your password is used only to sign in and isn't saved in this browser."
           }}</span>
         </div>

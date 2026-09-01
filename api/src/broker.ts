@@ -53,6 +53,7 @@ export type PluginAction =
   | "player.avatar"
   | "group.create"
   | "group.setWeight"
+  | "group.delete"
   | "track.create"
   | "track.rename"
   | "track.clone"

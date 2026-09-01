@@ -80,6 +80,24 @@ async function saveWeight() {
     busy.value = false
   }
 }
+async function remove(group) {
+  if (
+    !window.confirm(
+      `Delete group ${group.name}? Its permissions, parent assignments, and track entries will be removed.`,
+    )
+  )
+    return
+  busy.value = true
+  try {
+    await stonePermsApi.deleteGroup(serverId.value, group.name)
+    toasts.success('Permission group deleted.')
+    await load()
+  } catch (cause) {
+    toasts.error(cause.userMessage || cause.message)
+  } finally {
+    busy.value = false
+  }
+}
 onMounted(load)
 watch(serverId, () => void load())
 useLiveRefresh(() => load({ quiet: true }))
@@ -121,6 +139,14 @@ useLiveRefresh(() => load({ quiet: true }))
         <div class="group-actions">
           <button v-if="canManage" class="button small" type="button" @click="openWeight(group)">
             Set weight</button
+          ><button
+            v-if="canManage && group.name !== directory.defaultGroup"
+            class="button small danger"
+            type="button"
+            :disabled="busy"
+            @click="remove(group)"
+          >
+            <AppIcon name="trash" :size="13" /></button
           ><RouterLink
             class="button small"
             :to="{ path: `/servers/${serverId}/editor`, query: { holder: `group:${group.name}` } }"

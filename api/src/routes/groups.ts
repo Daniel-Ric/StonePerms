@@ -72,6 +72,21 @@ export function registerGroupAndTrackRoutes(context: ApiRouteContext): void {
     },
   );
 
+  app.delete(
+    "/v1/servers/:serverId/groups/:name",
+    {
+      preHandler: requireCsrf,
+      schema: { ...secured(["groups"]), params: serverResourceParams("name", 64) },
+    },
+    async (request, reply) => {
+      const { serverId, name } = request.params as { serverId: string; name: string };
+      database.requireRole(serverId, request.auth!.userId, ["owner", "admin"]);
+      await broker.request(serverId, "group.delete", webActor(request.auth!), { name });
+      database.audit(request.auth!.userId, serverId, "group.delete", name);
+      return reply.status(204).send();
+    },
+  );
+
   app.post(
     "/v1/servers/:serverId/tracks",
     {

@@ -2540,6 +2540,35 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
+.login-claim-setup {
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-input) 55%, transparent);
+}
+.login-claim-heading {
+  margin-bottom: 14px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.login-claim-heading strong,
+.login-claim-heading small {
+  display: block;
+}
+.login-claim-heading small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.login-claim-setup .login-methods {
+  margin-bottom: 14px;
+}
+.login-claim-setup .field:last-child {
+  margin-bottom: 0;
+}
 .login-form .button {
   margin-top: 7px;
   min-height: 44px;
@@ -2679,6 +2708,9 @@
 .danger-zone {
   margin-top: 14px;
   border-color: var(--danger-line);
+}
+.legacy-recovery-panel {
+  margin-top: 14px;
 }
 .danger-zone .panel-header {
   min-height: 72px;

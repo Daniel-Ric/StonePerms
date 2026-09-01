@@ -37,6 +37,8 @@ const liveApi = {
   createGroup: (id, payload) => request('post', `/v1/servers/${id}/groups`, { data: payload }),
   setGroupWeight: (id, name, weight) =>
     request('patch', `/v1/servers/${id}/groups/${encodeURIComponent(name)}`, { data: { weight } }),
+  deleteGroup: (id, name) =>
+    request('delete', `/v1/servers/${id}/groups/${encodeURIComponent(name)}`),
   createTrack: (id, name) => request('post', `/v1/servers/${id}/tracks`, { data: { name } }),
   renameTrack: (id, name, newName) =>
     request('post', `/v1/servers/${id}/tracks/${encodeURIComponent(name)}/rename`, {
@@ -57,6 +59,10 @@ const liveApi = {
     request('get', `/v1/servers/${id}/plugin-audit`, { params: { limit } }),
   createPairingCode: () => request('post', '/v1/pairing-codes'),
   revokeServer: (id) => request('delete', `/v1/servers/${id}/credential`),
+  deleteServer: (id) => request('delete', `/v1/servers/${id}`),
+  legacyServers: () => request('get', '/v1/legacy-servers'),
+  recoverLegacyServer: (id, payload) =>
+    request('post', `/v1/legacy-servers/${id}/recover`, { data: payload }),
   users: () => request('get', '/v1/users'),
   createUser: (payload) => request('post', '/v1/users', { data: payload }),
   setMembership: (serverId, userId, role) =>

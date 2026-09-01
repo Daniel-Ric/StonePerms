@@ -116,6 +116,16 @@ The public service does not require an API address in the command:
 stoneperms web pair ABCD-EFGH-JKLM-NPQR "My Server"
 ```
 
+Running `stoneperms web login` on a server without an owner creates a short-lived claim code. The
+dashboard verifies that code first, then requires either a new username and password or the
+credentials of an existing account before it assigns the server. The claim code is consumed only
+when the account and owner membership are stored together.
+
+Legacy passwordless accounts are upgraded through the same code screen when their plugin
+credential is still available. If a legacy instance was already revoked, a system owner can open
+**Web users**, assign the instance to an active permanent account, and let that account pair the
+same instance again. Instance-ID knowledge alone is not accepted as ownership proof.
+
 ## Security model
 
 - Passwords use `scrypt`; opaque session, CSRF, pairing, and server tokens come from a CSPRNG.
@@ -142,21 +152,21 @@ directory because `config.toml` contains the server credential required for auto
 
 ## API surface in v1
 
-| Area              | Routes                                                                          |
-| ----------------- | ------------------------------------------------------------------------------- |
-| Health            | `GET /health`, `GET /ready`, `GET /v1/public-config`                            |
-| Authentication    | registration, password or one-time-code login, logout, and current-user routes  |
-| Local users       | `GET /v1/users`, `POST /v1/users`                                               |
-| Pairing           | pairing, plugin credentials, and owner login-code issuance                      |
-| Plugin transport  | `GET /v1/plugin/connect` (WebSocket), `DELETE /v1/plugin/credential`            |
-| Servers           | `GET /v1/servers`, `GET /v1/servers/:serverId`, credential revocation           |
-| Memberships       | owner-only create/update and delete routes below each server                    |
-| Directory         | groups, tracks, known players, player profiles, inspection, and proxied avatars |
-| Display           | `GET` and owner/admin `PUT /v1/servers/:serverId/display`                       |
-| Plugin settings   | `GET` and owner/admin `PUT /v1/servers/:serverId/settings`                      |
-| Groups and tracks | group create/weight, track create/rename/clone/delete, promote/demote           |
-| Editor            | read-only or writable snapshot sessions and atomically applied changesets       |
-| Audit             | `GET /v1/audit` for the API and per-server plugin permission audit              |
+| Area              | Routes                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| Health            | `GET /health`, `GET /ready`, `GET /v1/public-config`                                     |
+| Authentication    | registration, password or account-backed one-time-code login, logout, and session routes |
+| Local users       | `GET /v1/users`, `POST /v1/users`                                                        |
+| Pairing           | pairing, plugin credentials, and owner login-code issuance                               |
+| Plugin transport  | `GET /v1/plugin/connect` (WebSocket), `DELETE /v1/plugin/credential`                     |
+| Servers           | list, detail, credential revocation, and owner-only dashboard deletion                   |
+| Memberships       | owner-only create/update and delete routes below each server                             |
+| Directory         | groups, tracks, known players, player profiles, inspection, and proxied avatars          |
+| Display           | `GET` and owner/admin `PUT /v1/servers/:serverId/display`                                |
+| Plugin settings   | `GET` and owner/admin `PUT /v1/servers/:serverId/settings`                               |
+| Groups and tracks | group create/weight/delete, track create/rename/clone/delete, promote/demote             |
+| Editor            | read-only or writable snapshot sessions and atomically applied changesets                |
+| Audit             | `GET /v1/audit` for the API and per-server plugin permission audit                       |
 
 The Vue dashboard consumes only these browser routes. It never knows the plugin server token and
 never connects to the plugin WebSocket endpoint.

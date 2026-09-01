@@ -41,6 +41,11 @@ export interface ServerListRecord extends ServerRecord {
   role: ServerRole;
 }
 
+export interface LegacyServerRecord extends ServerRecord {
+  legacyUserId: string;
+  legacyUsername: string;
+}
+
 export interface AuditRecord {
   id: number;
   actorUserId: string | null;
@@ -55,6 +60,8 @@ export interface AuditRecord {
 interface Row {
   [column: string]: unknown;
 }
+
+type AccountTarget = { userId: string } | { username: string; passwordHash: string };
 
 const MIGRATION = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -301,6 +308,31 @@ export class ApiDatabase {
   private deleteInactiveLoginCodes(): void {
     const current = now();
     this.db
+      .prepare(
+        `UPDATE servers
+         SET instance_id = 'released:' || id,
+             token_hash = 'released:' || id,
+             revoked_at = COALESCE(revoked_at, ?)
+         WHERE revoked_at IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM server_memberships m WHERE m.server_id = servers.id
+           )`,
+      )
+      .run(current);
+    this.db
+      .prepare(
+        `DELETE FROM server_claim_codes
+         WHERE server_id IN (
+           SELECT id
+           FROM servers
+           WHERE revoked_at IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM server_memberships m WHERE m.server_id = servers.id
+             )
+         )`,
+      )
+      .run();
+    this.db
       .prepare("DELETE FROM login_codes WHERE expires_at <= ? OR consumed_at IS NOT NULL")
       .run(current);
     this.db
@@ -381,32 +413,46 @@ export class ApiDatabase {
     protocolVersion: number;
     expiresAt: number;
   }): { server: ServerRecord; code: string } {
+    this.deleteInactiveLoginCodes();
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const existing = this.db
         .prepare("SELECT * FROM servers WHERE instance_id = ?")
         .get(input.instanceId) as Row | undefined;
-      if (existing) {
+      if (existing && existing.revoked_at === null) {
         throw conflict(
           "SERVER_ALREADY_REGISTERED",
           "This server instance is already registered and must use its existing credential",
         );
       }
       const issued = this.nextLoginCode();
-      const serverId = randomUUID();
-      this.db
-        .prepare(
-          `INSERT INTO servers(id, instance_id, name, token_hash, plugin_version, protocol_version, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          serverId,
-          input.instanceId,
-          input.name,
-          input.tokenHash,
-          input.pluginVersion,
-          input.protocolVersion,
-          now(),
-        );
+      const serverId = existing ? String(existing.id) : randomUUID();
+      if (existing) {
+        this.db.prepare("DELETE FROM login_codes WHERE server_id = ?").run(serverId);
+        this.db.prepare("DELETE FROM server_claim_codes WHERE server_id = ?").run(serverId);
+        this.db.prepare("DELETE FROM server_memberships WHERE server_id = ?").run(serverId);
+        this.db
+          .prepare(
+            `UPDATE servers
+             SET name = ?, token_hash = ?, plugin_version = ?, protocol_version = ?, last_seen_at = NULL, revoked_at = NULL
+             WHERE id = ? AND revoked_at IS NOT NULL`,
+          )
+          .run(input.name, input.tokenHash, input.pluginVersion, input.protocolVersion, serverId);
+      } else {
+        this.db
+          .prepare(
+            `INSERT INTO servers(id, instance_id, name, token_hash, plugin_version, protocol_version, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            serverId,
+            input.instanceId,
+            input.name,
+            input.tokenHash,
+            input.pluginVersion,
+            input.protocolVersion,
+            now(),
+          );
+      }
       this.insertServerClaimCode(serverId, issued.codeHash, input.expiresAt);
       this.db.exec("COMMIT");
       return { server: this.getServer(serverId)!, code: issued.code };
@@ -428,8 +474,7 @@ export class ApiDatabase {
 
   consumeServerClaimCode(
     codeHash: string,
-    username: string,
-    passwordHash: string,
+    account: AccountTarget,
   ): { user: UserRecord; serverId: string } | null {
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -449,17 +494,37 @@ export class ApiDatabase {
         this.db.exec("COMMIT");
         return null;
       }
-      const userId = randomUUID();
-      this.db
-        .prepare(
-          "INSERT INTO users(id, username, system_role, password_hash, created_at) VALUES(?, ?, 'user', ?, ?)",
-        )
-        .run(userId, username, passwordHash, current);
+      let user: UserRecord;
+      if ("userId" in account) {
+        const row = this.db
+          .prepare("SELECT * FROM users WHERE id = ? AND disabled_at IS NULL")
+          .get(account.userId) as Row | undefined;
+        if (!row) {
+          this.db.exec("COMMIT");
+          return null;
+        }
+        user = mapUser(row);
+      } else {
+        const userId = randomUUID();
+        this.db
+          .prepare(
+            "INSERT INTO users(id, username, system_role, password_hash, created_at) VALUES(?, ?, 'user', ?, ?)",
+          )
+          .run(userId, account.username, account.passwordHash, current);
+        user = {
+          id: userId,
+          username: account.username,
+          systemRole: "user",
+          passwordHash: account.passwordHash,
+          createdAt: current,
+          disabledAt: null,
+        };
+      }
       this.db
         .prepare(
           "INSERT INTO server_memberships(server_id, user_id, role, created_at) VALUES(?, ?, 'owner', ?)",
         )
-        .run(serverId, userId, current);
+        .run(serverId, user.id, current);
       const consumed = this.db
         .prepare(
           "UPDATE server_claim_codes SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL AND expires_at > ?",
@@ -471,17 +536,123 @@ export class ApiDatabase {
       }
       this.db.prepare("DELETE FROM server_claim_codes WHERE id = ?").run(String(claim.id));
       this.db.exec("COMMIT");
-      return {
-        user: {
-          id: userId,
-          username,
-          systemRole: "user",
-          passwordHash,
-          createdAt: current,
-          disabledAt: null,
-        },
-        serverId,
-      };
+      return { user, serverId };
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  findActiveLoginCode(codeHash: string): { user: UserRecord; serverId: string } | null {
+    const row = this.db
+      .prepare(
+        `SELECT c.server_id, u.*
+         FROM login_codes c
+         JOIN users u ON u.id = c.user_id
+         WHERE c.code_hash = ?
+           AND c.consumed_at IS NULL
+           AND c.expires_at > ?
+           AND u.disabled_at IS NULL`,
+      )
+      .get(codeHash, now()) as Row | undefined;
+    return row ? { user: mapUser(row), serverId: String(row.server_id) } : null;
+  }
+
+  isLegacyAccount(userId: string, serverId: string): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          `SELECT 1 AS present
+           FROM users u
+           WHERE u.id = ?
+             AND u.username GLOB 'server-*'
+             AND EXISTS (
+               SELECT 1
+               FROM api_audit a
+               WHERE a.actor_user_id = u.id
+                 AND a.server_id = ?
+                 AND a.action = 'auth.code.claim'
+             )`,
+        )
+        .get(userId, serverId),
+    );
+  }
+
+  consumeLegacyLoginCode(
+    codeHash: string,
+    account: AccountTarget,
+  ): { user: UserRecord; serverId: string } | null {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = now();
+      const row = this.db
+        .prepare(
+          `SELECT c.id AS code_id, c.server_id, c.expires_at, c.consumed_at, u.*
+           FROM login_codes c
+           JOIN users u ON u.id = c.user_id
+           WHERE c.code_hash = ? AND u.disabled_at IS NULL`,
+        )
+        .get(codeHash) as Row | undefined;
+      if (
+        !row ||
+        row.consumed_at !== null ||
+        Number(row.expires_at) <= current ||
+        !this.isLegacyAccount(String(row.id), String(row.server_id))
+      ) {
+        this.db.exec("COMMIT");
+        return null;
+      }
+      const legacyUserId = String(row.id);
+      const serverId = String(row.server_id);
+      let user: UserRecord;
+      if ("userId" in account) {
+        const target = this.db
+          .prepare("SELECT * FROM users WHERE id = ? AND disabled_at IS NULL")
+          .get(account.userId) as Row | undefined;
+        if (!target || account.userId === legacyUserId) {
+          this.db.exec("COMMIT");
+          return null;
+        }
+        this.db
+          .prepare("DELETE FROM server_memberships WHERE server_id = ? AND user_id = ?")
+          .run(serverId, legacyUserId);
+        this.db
+          .prepare(
+            `INSERT INTO server_memberships(server_id, user_id, role, created_at)
+             VALUES(?, ?, 'owner', ?)
+             ON CONFLICT(server_id, user_id) DO UPDATE SET role = 'owner'`,
+          )
+          .run(serverId, account.userId, current);
+        user = mapUser(target);
+      } else {
+        const updated = this.db
+          .prepare(
+            "UPDATE users SET username = ?, password_hash = ? WHERE id = ? AND disabled_at IS NULL",
+          )
+          .run(account.username, account.passwordHash, legacyUserId);
+        if (updated.changes !== 1) {
+          this.db.exec("ROLLBACK");
+          return null;
+        }
+        user = {
+          ...mapUser(row),
+          username: account.username,
+          passwordHash: account.passwordHash,
+        };
+      }
+      const consumed = this.db
+        .prepare(
+          "UPDATE login_codes SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL AND expires_at > ?",
+        )
+        .run(current, String(row.code_id), current);
+      if (consumed.changes !== 1) {
+        this.db.exec("ROLLBACK");
+        return null;
+      }
+      this.db.prepare("DELETE FROM web_sessions WHERE user_id = ?").run(legacyUserId);
+      this.db.prepare("DELETE FROM login_codes WHERE id = ?").run(String(row.code_id));
+      this.db.exec("COMMIT");
+      return { user, serverId };
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
@@ -625,6 +796,99 @@ export class ApiDatabase {
     }));
   }
 
+  listRecoverableLegacyServers(): LegacyServerRecord[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT s.*, u.id AS legacy_user_id, u.username AS legacy_username
+           FROM servers s
+           JOIN server_memberships m ON m.server_id = s.id AND m.role = 'owner'
+           JOIN users u ON u.id = m.user_id
+           WHERE u.username GLOB 'server-*'
+             AND EXISTS (
+               SELECT 1
+               FROM api_audit a
+               WHERE a.actor_user_id = u.id
+                 AND a.server_id = s.id
+                 AND a.action = 'auth.code.claim'
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM server_memberships other
+               WHERE other.server_id = s.id
+                 AND other.role = 'owner'
+                 AND other.user_id <> u.id
+             )
+           ORDER BY s.name COLLATE NOCASE, s.id`,
+        )
+        .all() as Row[]
+    ).map((row) => ({
+      ...mapServer(row),
+      legacyUserId: String(row.legacy_user_id),
+      legacyUsername: String(row.legacy_username),
+    }));
+  }
+
+  recoverLegacyServer(serverId: string, targetUserId: string): LegacyServerRecord {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.db
+        .prepare(
+          `SELECT s.*, u.id AS legacy_user_id, u.username AS legacy_username
+           FROM servers s
+           JOIN server_memberships m ON m.server_id = s.id AND m.role = 'owner'
+           JOIN users u ON u.id = m.user_id
+           WHERE s.id = ?
+             AND u.username GLOB 'server-*'
+             AND EXISTS (
+               SELECT 1
+               FROM api_audit a
+               WHERE a.actor_user_id = u.id
+                 AND a.server_id = s.id
+                 AND a.action = 'auth.code.claim'
+             )
+             AND NOT EXISTS (
+               SELECT 1
+               FROM server_memberships other
+               WHERE other.server_id = s.id
+                 AND other.role = 'owner'
+                 AND other.user_id <> u.id
+             )`,
+        )
+        .get(serverId) as Row | undefined;
+      if (!row) throw notFound("Recoverable legacy server not found");
+      const target = this.db
+        .prepare("SELECT * FROM users WHERE id = ? AND disabled_at IS NULL")
+        .get(targetUserId) as Row | undefined;
+      if (!target || targetUserId === String(row.legacy_user_id)) {
+        throw conflict("LEGACY_RECOVERY_TARGET_INVALID", "Choose a permanent active account");
+      }
+      const current = now();
+      this.db
+        .prepare("DELETE FROM server_memberships WHERE server_id = ? AND user_id = ?")
+        .run(serverId, String(row.legacy_user_id));
+      this.db
+        .prepare(
+          `INSERT INTO server_memberships(server_id, user_id, role, created_at)
+           VALUES(?, ?, 'owner', ?)
+           ON CONFLICT(server_id, user_id) DO UPDATE SET role = 'owner'`,
+        )
+        .run(serverId, targetUserId, current);
+      this.db.prepare("DELETE FROM login_codes WHERE server_id = ?").run(serverId);
+      this.db.prepare("DELETE FROM server_claim_codes WHERE server_id = ?").run(serverId);
+      this.db.prepare("DELETE FROM web_sessions WHERE user_id = ?").run(String(row.legacy_user_id));
+      this.db.exec("COMMIT");
+      return {
+        ...mapServer(row),
+        legacyUserId: String(row.legacy_user_id),
+        legacyUsername: String(row.legacy_username),
+      };
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   listMemberships(serverId: string): Array<{ userId: string; username: string; role: ServerRole }> {
     return (
       this.db
@@ -695,6 +959,25 @@ export class ApiDatabase {
       .prepare("UPDATE servers SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL")
       .run(now(), serverId);
     if (result.changes === 0) throw conflict("SERVER_ALREADY_REVOKED", "Server is already revoked");
+  }
+
+  removeServer(serverId: string): void {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = now();
+      const releasedId = `removed:${serverId}`;
+      const result = this.db
+        .prepare("UPDATE servers SET instance_id = ?, token_hash = ?, revoked_at = ? WHERE id = ?")
+        .run(releasedId, tokenDigest(releasedId), current, serverId);
+      if (result.changes !== 1) throw notFound("Server not found");
+      this.db.prepare("DELETE FROM login_codes WHERE server_id = ?").run(serverId);
+      this.db.prepare("DELETE FROM server_claim_codes WHERE server_id = ?").run(serverId);
+      this.db.prepare("DELETE FROM server_memberships WHERE server_id = ?").run(serverId);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   audit(

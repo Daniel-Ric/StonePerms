@@ -391,6 +391,7 @@ export const demoApi = {
       weight: payload.weight,
     }),
   setGroupWeight: (_id, name, weight) => pause({ name, displayName: name, weight }),
+  deleteGroup: () => pause(null),
   createTrack: (_id, name) => pause({ name, groups: [] }),
   renameTrack: (_id, _name, newName) => pause({ name: newName, groups: [] }),
   cloneTrack: (_id, _name, cloneName) => pause({ name: cloneName, groups: ['member', 'vip'] }),
@@ -418,6 +419,12 @@ export const demoApi = {
     }),
   createPairingCode: () => pause({ code: 'DEMO-STON-PERM-2026', expiresAt: now + 600 }),
   revokeServer: () => pause(null),
+  deleteServer: (id) => {
+    state.servers = state.servers.filter((server) => server.id !== id)
+    return pause(null)
+  },
+  legacyServers: () => pause({ servers: [] }),
+  recoverLegacyServer: () => pause(null),
   users: () => pause({ users: state.users }),
   createUser: (payload) =>
     pause({

@@ -424,6 +424,66 @@ class SqlitePermissionRepository:
             )
         self._revision += 1
 
+    def delete_group(self, name: str, actor: str) -> bool:
+        connection = self._require_connection()
+        normalized = normalize_group_name(name)
+        timestamp = int(time.time())
+        with self._lock, connection:
+            group = connection.execute(
+                "SELECT display_name, weight FROM permission_groups WHERE name = ?",
+                (normalized,),
+            ).fetchone()
+            if group is None:
+                return False
+            track_rows = connection.execute(
+                "SELECT track_name FROM track_groups WHERE group_name = ? ORDER BY track_name",
+                (normalized,),
+            ).fetchall()
+            track_names = tuple(row["track_name"] for row in track_rows)
+            owned_nodes = connection.execute(
+                "DELETE FROM nodes WHERE subject_type = 'group' AND subject_id = ?",
+                (normalized,),
+            ).rowcount
+            parent_references = connection.execute(
+                "DELETE FROM nodes WHERE node_type = 'parent' AND node_key = ?",
+                (normalized,),
+            ).rowcount
+            connection.execute("DELETE FROM track_groups WHERE group_name = ?", (normalized,))
+            for track_name in track_names:
+                groups = self._load_track_groups(connection, track_name)
+                for position, group_name in enumerate(groups):
+                    connection.execute(
+                        "UPDATE track_groups SET position = ? WHERE track_name = ? AND group_name = ?",
+                        (position, track_name, group_name),
+                    )
+                connection.execute(
+                    "UPDATE tracks SET updated_at = ? WHERE name = ?",
+                    (timestamp, track_name),
+                )
+            cursor = connection.execute(
+                "DELETE FROM permission_groups WHERE name = ?",
+                (normalized,),
+            )
+            deleted = cursor.rowcount > 0
+            if deleted:
+                self._insert_audit(
+                    connection,
+                    actor,
+                    "group.delete",
+                    SubjectRef.group(normalized),
+                    {
+                        "display_name": group["display_name"],
+                        "weight": int(group["weight"]),
+                        "owned_nodes": owned_nodes,
+                        "parent_references": parent_references,
+                        "tracks": list(track_names),
+                    },
+                    timestamp,
+                )
+        if deleted:
+            self._revision += 1
+        return deleted
+
     def create_track(
         self,
         track: TrackRecord,

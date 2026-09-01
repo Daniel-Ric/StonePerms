@@ -66,8 +66,9 @@ export const useStonePermsStore = defineStore('stoneperms', () => {
     return result
   }
 
-  async function loginWithCode(code) {
-    const result = await stonePermsApi.loginWithCode({ code })
+  async function loginWithCode(code, account = null) {
+    const result = await stonePermsApi.loginWithCode({ code, ...(account || {}) })
+    if (!result.user) return result
     user.value = result.user
     initialized.value = true
     await refresh()
@@ -107,8 +108,8 @@ export const useStonePermsStore = defineStore('stoneperms', () => {
       ])
       health.value = healthResult
       servers.value = serversResult.servers || []
-      if (!servers.value.some((server) => server.id === selectedServerId.value) && servers.value[0])
-        selectServer(servers.value[0].id)
+      if (!servers.value.some((server) => server.id === selectedServerId.value))
+        selectServer(servers.value[0]?.id || '')
       lastUpdated.value = new Date()
     } catch (cause) {
       error.value = cause.userMessage || cause.message

@@ -16,8 +16,9 @@ const router = useRouter()
 const store = useStonePermsStore()
 const detail = ref(null)
 const loading = ref(true)
-const confirming = ref(false)
+const confirming = ref('')
 const revoking = ref(false)
+const deleting = ref(false)
 const id = computed(() => String(route.params.serverId))
 async function load({ quiet = false } = {}) {
   if (!quiet) loading.value = true
@@ -40,6 +41,19 @@ async function revoke() {
     toasts.error(cause.userMessage || cause.message)
   } finally {
     revoking.value = false
+  }
+}
+async function deleteServer() {
+  deleting.value = true
+  try {
+    await stonePermsApi.deleteServer(id.value)
+    toasts.success('The server was deleted from the dashboard.')
+    await store.refresh()
+    await router.push('/servers')
+  } catch (cause) {
+    toasts.error(cause.userMessage || cause.message)
+  } finally {
+    deleting.value = false
   }
 }
 onMounted(load)
@@ -135,27 +149,49 @@ useLiveRefresh(() => load({ quiet: true }))
     <article v-if="store.canOwn(detail.server)" class="panel danger-zone">
       <header class="panel-header">
         <div>
-          <h3>Credential control</h3>
-          <small>Revoking disconnects this plugin and requires a new pairing flow.</small>
+          <h3>Server access</h3>
+          <small>Revoke only the credential or remove the complete dashboard assignment.</small>
         </div>
-        <button class="button danger" type="button" @click="confirming = true">
-          <AppIcon name="trash" />Revoke connection
-        </button>
+        <div class="page-actions">
+          <button class="button" type="button" @click="confirming = 'revoke'">
+            <AppIcon name="lock" />Revoke connection
+          </button>
+          <button class="button danger" type="button" @click="confirming = 'delete'">
+            <AppIcon name="trash" />Delete server
+          </button>
+        </div>
       </header>
     </article>
     <BaseModal
-      v-if="confirming"
+      v-if="confirming === 'revoke'"
       title="Revoke server connection?"
       :description="`The credential for ${detail.server.name} will stop working immediately.`"
-      @close="confirming = false"
+      @close="confirming = ''"
       ><p class="modal-warning">
         <AppIcon name="warning" />This does not delete the permission database on the Minecraft
         server. It only removes dashboard access until the plugin is paired again.
       </p>
       <template #footer
-        ><button class="button" type="button" @click="confirming = false">Cancel</button
+        ><button class="button" type="button" @click="confirming = ''">Cancel</button
         ><button class="button danger" type="button" :disabled="revoking" @click="revoke">
           {{ revoking ? 'Revoking…' : 'Revoke credential' }}
+        </button></template
+      ></BaseModal
+    >
+    <BaseModal
+      v-if="confirming === 'delete'"
+      title="Delete server from dashboard?"
+      :description="`${detail.server.name} and all team access will be removed from this dashboard.`"
+      @close="confirming = ''"
+      ><p class="modal-warning">
+        <AppIcon name="warning" />The Minecraft server's local permission database is not deleted.
+        Its current web credential stops working and the instance can be paired again as a new
+        server.
+      </p>
+      <template #footer
+        ><button class="button" type="button" @click="confirming = ''">Cancel</button
+        ><button class="button danger" type="button" :disabled="deleting" @click="deleteServer">
+          {{ deleting ? 'Deleting…' : 'Delete server' }}
         </button></template
       ></BaseModal
     >

@@ -190,6 +190,13 @@ class StonePermsService(Service):
         group = next(group for group in self._manager.list_groups() if group.name == normalized)
         return {"name": group.name, "displayName": group.display_name, "weight": group.weight}
 
+    def delete_web_group(self, name: str, *, actor: str) -> dict[str, object]:
+        normalized = normalize_group_name(name)
+        deleted = self._manager.delete_group(normalized, actor=actor)
+        if deleted and self._on_editor_change is not None:
+            self._on_editor_change()
+        return {"name": normalized, "deleted": deleted}
+
     def create_web_track(self, name: str, *, actor: str) -> dict[str, object]:
         if not self._manager.create_track(name, actor=actor):
             raise ValueError(f"Track {name!r} already exists")

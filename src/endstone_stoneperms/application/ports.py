@@ -94,6 +94,9 @@ class PermissionRepository(Protocol):
     def set_group_weight(self, name: str, weight: int, actor: str) -> None:
         pass
 
+    def delete_group(self, name: str, actor: str) -> bool:
+        pass
+
     def create_track(self, track: TrackRecord, actor: str, action: str = "track.create") -> bool:
         pass
 

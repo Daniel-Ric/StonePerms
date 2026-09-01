@@ -11,9 +11,14 @@ import { toasts } from '@/services/toasts'
 import { formatDate, titleCase } from '@/lib/format'
 
 const users = ref([])
+const legacyServers = ref([])
 const loading = ref(true)
 const open = ref(false)
 const busy = ref(false)
+const recovery = ref(null)
+const recoveryUsername = ref('')
+const recoveryBusy = ref(false)
+const recoveryError = ref('')
 const query = ref('')
 const form = ref({ username: '', password: '' })
 const error = ref('')
@@ -23,11 +28,38 @@ const filtered = computed(() =>
 async function load({ quiet = false } = {}) {
   if (!quiet) loading.value = true
   try {
-    users.value = (await stonePermsApi.users()).users || []
+    const [usersResult, legacyResult] = await Promise.all([
+      stonePermsApi.users(),
+      stonePermsApi.legacyServers(),
+    ])
+    users.value = usersResult.users || []
+    legacyServers.value = legacyResult.servers || []
   } catch (cause) {
     if (!quiet) toasts.error(cause.userMessage || cause.message)
   } finally {
     if (!quiet) loading.value = false
+  }
+}
+function openRecovery(server) {
+  recovery.value = server
+  recoveryUsername.value = ''
+  recoveryError.value = ''
+}
+async function recover() {
+  recoveryError.value = ''
+  recoveryBusy.value = true
+  try {
+    await stonePermsApi.recoverLegacyServer(recovery.value.id, {
+      username: recoveryUsername.value.trim(),
+    })
+    toasts.success('Legacy server ownership recovered.')
+    recovery.value = null
+    recoveryUsername.value = ''
+    await load()
+  } catch (cause) {
+    recoveryError.value = cause.userMessage || cause.message
+  } finally {
+    recoveryBusy.value = false
   }
 }
 async function create() {
@@ -110,6 +142,54 @@ useLiveRefresh(() => load({ quiet: true }))
       description="Create a local identity, then assign it from a server's Team access page."
     />
   </article>
+  <article class="panel legacy-recovery-panel">
+    <header class="panel-header">
+      <div>
+        <h3>Legacy recovery</h3>
+        <small>Reassign instances that still belong to passwordless legacy accounts.</small>
+      </div>
+      <span>{{ legacyServers.length }} recoverable</span>
+    </header>
+    <LoadingBlock v-if="loading" :rows="3" />
+    <div v-else-if="legacyServers.length" class="responsive-table">
+      <table class="data-table mobile-cards">
+        <thead>
+          <tr>
+            <th>Server</th>
+            <th>Instance ID</th>
+            <th>Legacy account</th>
+            <th>Credential</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="server in legacyServers" :key="server.id">
+            <td data-label="Server">
+              <span class="primary-cell">{{ server.name }}</span>
+            </td>
+            <td data-label="Instance ID">
+              <code>{{ server.instanceId }}</code>
+            </td>
+            <td data-label="Legacy account">{{ server.legacyUsername }}</td>
+            <td data-label="Credential">
+              {{ server.revokedAt ? `Revoked ${formatDate(server.revokedAt)}` : 'Active' }}
+            </td>
+            <td class="table-actions">
+              <button class="button compact" type="button" @click="openRecovery(server)">
+                <AppIcon name="refresh" :size="14" />Recover
+              </button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <EmptyState
+      v-else
+      icon="shield"
+      title="No legacy recovery required"
+      description="Instances with inaccessible legacy owners will appear here."
+    />
+  </article>
   <BaseModal
     v-if="open"
     title="Create web user"
@@ -146,6 +226,42 @@ useLiveRefresh(() => load({ quiet: true }))
         @click="create"
       >
         {{ busy ? 'Creating…' : 'Create user' }}
+      </button></template
+    ></BaseModal
+  >
+  <BaseModal
+    v-if="recovery"
+    title="Recover legacy server"
+    :description="`Assign ${recovery.name} to a permanent existing account.`"
+    @close="recovery = null"
+    ><div class="form-grid">
+      <div class="field full">
+        <label>New owner username</label>
+        <input
+          v-model.trim="recoveryUsername"
+          autocomplete="off"
+          placeholder="permanent-account"
+          minlength="3"
+          maxlength="32"
+          pattern="[-A-Za-z0-9_.]{3,32}"
+        />
+        <small>The account must already exist and be active.</small>
+      </div>
+    </div>
+    <p class="modal-warning">
+      <AppIcon name="warning" />The legacy owner loses access. Pair the same plugin instance again
+      using a code created by the new owner.
+    </p>
+    <p v-if="recoveryError" class="form-error" role="alert">{{ recoveryError }}</p>
+    <template #footer
+      ><button class="button" type="button" @click="recovery = null">Cancel</button
+      ><button
+        class="button primary"
+        type="button"
+        :disabled="recoveryBusy || !recoveryUsername"
+        @click="recover"
+      >
+        {{ recoveryBusy ? 'Recovering…' : 'Assign new owner' }}
       </button></template
     ></BaseModal
   >

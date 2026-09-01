@@ -1,5 +1,5 @@
 import type { ApiRouteContext } from "../http.js";
-import { notFound } from "../errors.js";
+import { forbidden, notFound } from "../errors.js";
 import {
   object,
   parseQueryLimit,
@@ -14,7 +14,7 @@ import {
 const ALL_SERVER_ROLES = ["owner", "admin", "editor", "viewer"] as const;
 
 export function registerAccessAndEditorRoutes(context: ApiRouteContext): void {
-  const { app, broker, database, requireAuth, requireCsrf } = context;
+  const { app, broker, database, requireAuth, requireCsrf, requireSystemOwner } = context;
 
   app.get(
     "/v1/servers/:serverId/plugin-audit",
@@ -110,6 +110,51 @@ export function registerAccessAndEditorRoutes(context: ApiRouteContext): void {
       broker.disconnect(serverId);
       database.audit(request.auth!.userId, serverId, "server.revoke", null);
       return reply.status(204).send();
+    },
+  );
+
+  app.delete(
+    "/v1/servers/:serverId",
+    { preHandler: requireCsrf, schema: { ...secured(["servers"]), params: serverParams() } },
+    async (request, reply) => {
+      const { serverId } = request.params as { serverId: string };
+      database.requireRole(serverId, request.auth!.userId, ["owner"]);
+      database.removeServer(serverId);
+      broker.disconnect(serverId);
+      database.audit(request.auth!.userId, serverId, "server.delete", null);
+      return reply.status(204).send();
+    },
+  );
+
+  app.get(
+    "/v1/legacy-servers",
+    { preHandler: requireAuth, schema: secured(["servers"]) },
+    async (request) => {
+      if (request.auth!.systemRole !== "owner") {
+        throw forbidden("System owner permission required");
+      }
+      return { servers: database.listRecoverableLegacyServers() };
+    },
+  );
+
+  app.post(
+    "/v1/legacy-servers/:serverId/recover",
+    {
+      preHandler: requireSystemOwner,
+      schema: {
+        ...secured(["servers"]),
+        params: serverParams(),
+        body: object({ username: { type: "string", pattern: USERNAME_PATTERN } }, ["username"]),
+      },
+    },
+    async (request) => {
+      const { serverId } = request.params as { serverId: string };
+      const { username } = request.body as { username: string };
+      const target = database.findUserByUsername(username);
+      if (!target || target.disabledAt !== null) throw notFound("Active web user not found");
+      const server = database.recoverLegacyServer(serverId, target.id);
+      database.audit(request.auth!.userId, serverId, "server.legacy.recover", target.id);
+      return { server, owner: { id: target.id, username: target.username } };
     },
   );
 

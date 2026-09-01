@@ -119,6 +119,17 @@ class StonePermsManager:
         self._repository.set_group_weight(normalized, int(weight), actor)
         self._invalidate()
 
+    def delete_group(self, name: str, *, actor: str) -> bool:
+        normalized = normalize_group_name(name)
+        if normalized == self._default_group:
+            raise ValueError("The active default group cannot be deleted")
+        if self._repository.get_group(normalized) is None:
+            raise UnknownSubjectError(f"Unknown group {normalized!r}")
+        with self._track_lock:
+            deleted = self._repository.delete_group(normalized, actor)
+            self._invalidate()
+            return deleted
+
     def create_track(self, name: str, *, actor: str) -> bool:
         track = TrackRecord(normalize_track_name(name))
         created = self._repository.create_track(track, actor)
