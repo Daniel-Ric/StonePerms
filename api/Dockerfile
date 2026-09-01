@@ -1,11 +1,11 @@
-FROM node:24-alpine AS dashboard-build
+FROM node:26-alpine AS dashboard-build
 WORKDIR /dashboard
 COPY dashboard/package.json dashboard/package-lock.json ./
 RUN npm ci
 COPY dashboard ./
 RUN npm run build
 
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 COPY api/package.json api/package-lock.json ./
 RUN npm ci
@@ -13,7 +13,7 @@ COPY api/tsconfig.json ./
 COPY api/src ./src
 RUN npm run build && npm prune --omit=dev
 
-FROM node:24-alpine AS runtime
+FROM node:26-alpine AS runtime
 ENV NODE_ENV=production \
     STONEPERMS_HOST=0.0.0.0 \
     STONEPERMS_PORT=3210 \
