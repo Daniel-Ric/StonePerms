@@ -146,8 +146,8 @@ class StonePermsPapiBridge:
             return
         try:
             api.unregister_expansions(self._plugin)
-        except (AttributeError, RuntimeError):
-            pass
+        except (AttributeError, RuntimeError) as exc:
+            self._plugin.logger.warning(f"Could not unregister the 'stoneperms' PAPI expansion: {exc}")
 
     def _modern_expansion(self, expansion_class: type[Any]) -> Any:
         resolver = self._resolver

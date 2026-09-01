@@ -186,8 +186,8 @@ class StonePermsPlugin(Plugin):
             self._papi.close()
         try:
             self.server.service_manager.unregister_all(self)
-        except (AttributeError, RuntimeError):
-            pass
+        except (AttributeError, RuntimeError) as exc:
+            self.logger.warning(f"Could not unregister StonePerms services: {exc}")
         if self._attachments is not None:
             self._attachments.close()
         if self._display is not None:

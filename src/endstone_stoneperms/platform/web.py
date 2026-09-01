@@ -125,10 +125,7 @@ class StonePermsWebConnector:
             if stop is not None:
                 stop.set()
         if connection is not None:
-            try:
-                connection.close()
-            except Exception:
-                pass
+            self._close_connection(connection)
         if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=5)
         with self._state_lock:
@@ -362,10 +359,7 @@ class StonePermsWebConnector:
                         self._connected = False
                         self._ready = False
                 if connection is not None:
-                    try:
-                        connection.close()
-                    except Exception:
-                        pass
+                    self._close_connection(connection, report_failure=not stop.is_set())
             if not stop.wait(backoff):
                 backoff = min(30.0, backoff * 2)
 
@@ -762,6 +756,16 @@ class StonePermsWebConnector:
             ):
                 raise ConnectionError("StonePerms API is not connected")
             active_connection.send(encoded)
+
+    def _close_connection(self, connection: Any, *, report_failure: bool = True) -> None:
+        try:
+            connection.close()
+        except Exception as exc:
+            if report_failure:
+                message = str(exc).strip() or exc.__class__.__name__
+                self._plugin.logger.warning(
+                    f"Could not close the StonePerms API connection: {message}"
+                )
 
     def _load_instance_id(self) -> str:
         path = Path(self._plugin.data_folder) / "instance-id"

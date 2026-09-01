@@ -111,20 +111,27 @@ class AttachmentManager:
         attachment = self._attachments.pop(identity, None)
         self._applied.pop(identity, None)
         if attachment is not None:
-            try:
-                attachment.remove()
-            except (AttributeError, RuntimeError):
-                pass
+            self._remove_attachment(identity, attachment)
 
     def close(self) -> None:
-        for attachment in tuple(self._attachments.values()):
-            try:
-                attachment.remove()
-            except (AttributeError, RuntimeError):
-                pass
+        for identity, attachment in tuple(self._attachments.items()):
+            self._remove_attachment(identity, attachment)
         self._attachments.clear()
         self._applied.clear()
         self._registered_permissions = frozenset()
+
+    def _remove_attachment(self, identity: str, attachment: Any) -> None:
+        try:
+            removed = attachment.remove()
+        except (AttributeError, RuntimeError) as exc:
+            self._plugin.logger.warning(
+                f"Could not remove the permission attachment for player {identity}: {exc}"
+            )
+            return
+        if removed is False:
+            self._plugin.logger.warning(
+                f"Could not remove the permission attachment for player {identity}"
+            )
 
     def _notify_player_applied(self, player: Player) -> None:
         if self._on_player_applied is not None:
