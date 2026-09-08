@@ -1,6 +1,6 @@
 {
   "name": "@stoneperms/dashboard",
-  "version": "0.8.12",
+  "version": "0.9.0",
   "description": "Web dashboard and permission editor for StonePerms",
   "private": true,
   "type": "module",
