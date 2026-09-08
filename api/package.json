@@ -28,11 +28,11 @@
     "pngjs": "7.0.0"
   },
   "devDependencies": {
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.4.1",
     "@types/pngjs": "6.0.5",
     "@types/ws": "8.18.1",
     "prettier": "3.9.6",
-    "tsx": "4.23.12",
+    "tsx": "4.23.13",
     "typescript": "7.0.2",
     "ws": "8.21.3"
   }
