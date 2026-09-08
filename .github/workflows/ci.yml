@@ -59,6 +59,41 @@ jobs:
       - name: Validate distributions
         run: python -m twine check dist/*
 
+  mysql:
+    name: MySQL storage
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: stoneperms-test
+          MYSQL_ROOT_HOST: "%"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pstoneperms-test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install project with MySQL support
+        run: python -m pip install -e ".[dev,mysql]"
+
+      - name: Test SQLite and MySQL storage
+        env:
+          STONEPERMS_TEST_MYSQL_HOST: 127.0.0.1
+          STONEPERMS_TEST_MYSQL_PASSWORD: stoneperms-test
+        run: python -m unittest discover -s tests -v
+
   web:
     name: Web (Node.js ${{ matrix.node-version }})
     runs-on: ubuntu-latest
