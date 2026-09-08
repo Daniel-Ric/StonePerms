@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from string import Formatter
 
 from .domain.validation import normalize_context_value, normalize_group_name
@@ -28,6 +29,18 @@ class StartupSettings:
 
 
 @dataclass(frozen=True, slots=True)
+class MySqlSettings:
+    host: str = "127.0.0.1"
+    port: int = 3306
+    database: str = "stoneperms"
+    username: str = "stoneperms"
+    password: str = dataclass_field(default="", repr=False)
+    connect_timeout: int = 5
+    read_timeout: int = 10
+    ssl_ca: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class StonePermsSettings:
     database_file: str = "stoneperms.db"
     default_group: str = "default"
@@ -44,6 +57,10 @@ class StonePermsSettings:
     web_server_name: str = "Endstone server"
     startup: StartupSettings = StartupSettings()
     display: DisplaySettings = DisplaySettings()
+    storage_backend: str = "sqlite"
+    storage_server_id: str = ""
+    storage_sync_ticks: int = 20
+    mysql: MySqlSettings = MySqlSettings()
 
 
 def load_settings(raw: Mapping[str, object]) -> StonePermsSettings:
@@ -56,6 +73,30 @@ def load_settings(raw: Mapping[str, object]) -> StonePermsSettings:
     display = _section(raw, "display")
     chat_display = _section(display, "chat")
     nametag_display = _section(display, "nametag")
+    mysql = _section(storage, "mysql")
+
+    backend = str(storage.get("backend", "sqlite")).strip().casefold()
+    if backend not in {"sqlite", "mysql"}:
+        raise ValueError("storage.backend must be sqlite or mysql")
+    server_id = str(storage.get("server_id", "")).strip()
+    if backend == "mysql" and not server_id:
+        raise ValueError("storage.server_id must identify this server when using MySQL")
+    if server_id:
+        server_id = normalize_context_value(server_id)
+    mysql_settings = MySqlSettings(
+        host=_bounded_text(mysql.get("host"), "127.0.0.1", 255),
+        port=_bounded_int(mysql.get("port"), 3306, 1, 65535),
+        database=_bounded_text(mysql.get("database"), "stoneperms", 64),
+        username=_bounded_text(mysql.get("username"), "stoneperms", 128),
+        password=str(mysql.get("password", "")),
+        connect_timeout=_bounded_int(mysql.get("connect_timeout"), 5, 1, 60),
+        read_timeout=_bounded_int(mysql.get("read_timeout"), 10, 1, 120),
+        ssl_ca=_bounded_text(mysql.get("ssl_ca"), "", 1024),
+    )
+    if backend == "mysql" and not all(
+        (mysql_settings.host, mysql_settings.database, mysql_settings.username)
+    ):
+        raise ValueError("MySQL host, database, and username must not be empty")
 
     database_file = str(storage.get("database", "stoneperms.db")).strip()
     if not database_file or "/" in database_file or "\\" in database_file or database_file in {".", ".."}:
@@ -63,6 +104,10 @@ def load_settings(raw: Mapping[str, object]) -> StonePermsSettings:
 
     return StonePermsSettings(
         database_file=database_file,
+        storage_backend=backend,
+        storage_server_id=server_id,
+        storage_sync_ticks=_bounded_int(storage.get("sync_ticks"), 20, 20, 1200),
+        mysql=mysql_settings,
         default_group=normalize_group_name(str(permissions.get("default_group", "default"))),
         server_context=normalize_context_value(str(contexts.get("server", "global"))),
         expiry_check_ticks=_bounded_int(maintenance.get("expiry_check_ticks"), 20, 20, 1200),

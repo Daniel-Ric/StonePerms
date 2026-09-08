@@ -32,7 +32,9 @@ it never opens the plugin database itself.
 ## Features
 
 - **Permission data** — users, groups, recursive inheritance, positive and negative nodes,
-  temporary assignments, weighted conflict resolution, and SQLite audit history.
+  temporary assignments, weighted conflict resolution, and persistent audit history.
+- **Storage** — SQLite by default, or optional MySQL with shared permissions, groups, tracks,
+  metadata, prefixes, and suffixes across servers and a separate user table for each server.
 - **Contexts** — built-in `server`, `world`, `dimension`, and `gamemode` values plus context
   providers registered by other Endstone plugins.
 - **Display data** — inherited metadata, multiple weighted prefixes and suffixes, PAPI placeholders,
@@ -290,10 +292,86 @@ In-game administrators can open the native UI with `/stoneperms form`. The Vue d
 same manager operations through editor protocol v1 and the authenticated web connection. The plugin
 validates and applies every change and keeps working when the API or dashboard is offline.
 
+## MySQL and multiple servers
+
+Existing installations continue using SQLite with the same configuration, database schema,
+commands, and permission behavior. MySQL is opt-in and requires MySQL 8.0 or newer. Install the
+optional driver in Endstone's Python environment:
+
+```sh
+python -m pip install "endstone-stoneperms[mysql]"
+```
+
+When copying the plugin wheel directly, install `PyMySQL[rsa]>=1.1.1,<2` in that environment.
+Create a dedicated database and a database account with permissions to create tables and read,
+insert, update, and delete rows. Configure every participating server to use the same database:
+
+```toml
+[storage]
+backend = "mysql"
+database = "stoneperms.db"
+server_id = "test1"
+sync_ticks = 20
+
+[storage.mysql]
+host = "127.0.0.1"
+port = 3306
+database = "stoneperms"
+username = "stoneperms"
+password = "replace-me"
+connect_timeout = 5
+read_timeout = 10
+ssl_ca = ""
+
+[contexts]
+server = "test1"
+```
+
+On the second server use `storage.server_id = "test2"` and `contexts.server = "test2"`.
+`storage.server_id` must be unique and stable for each server. It selects a dedicated
+`users_<hash>` table; `storage_servers` records the mapping. Player names, profiles, skins,
+online status, and gameplay observations stay local to that server. Shared user permission
+nodes use the player's UUID, so all servers must use consistent player identities.
+`contexts.server` determines which server-scoped nodes apply and can be changed independently.
+
+Groups, tracks, permission nodes, metadata, prefixes, suffixes, and the audit log are shared.
+Nodes without contexts apply everywhere. Use the existing context syntax to restrict any node:
+
+```text
+/stoneperms user Steve permission set fly.use true
+/stoneperms user Steve permission set kill.use true server=test1
+/stoneperms user Steve parent add moderator server=test1
+/stoneperms group prefix moderator set 100 "[Moderator]"
+/stoneperms user Steve suffix set 100 "[Test2]" server=test2
+```
+
+Here `fly.use` applies on both servers, while `kill.use` and the moderator membership apply
+only on `test1`. The moderator prefix is stored once and inherited wherever that group applies.
+`server=global` is a literal context value; omit the context to make a node global.
+
+Database revisions propagate changes to online players, including their name tags, every
+`storage.sync_ticks` (20 ticks by default). Webeditor batches check the shared revision inside
+their transaction and reject stale edits. Failed synchronization is retried on the next poll.
+Storage connection settings and `storage.server_id` require a restart. Set `ssl_ca` to a trusted
+CA certificate file to enable TLS with certificate and hostname verification, using the
+[PyMySQL connection options](https://pymysql.readthedocs.io/en/latest/modules/connections.html).
+
+Switching backends does not copy or delete data. The original SQLite file remains intact;
+switching back to SQLite reopens it. Provision shared MySQL data before switching an existing
+production server. MySQL needs database connectivity; StonePerms never silently falls back to
+an independent SQLite database when that connection fails.
+
+The MySQL integration tests use `STONEPERMS_TEST_MYSQL_HOST`, optional
+`STONEPERMS_TEST_MYSQL_PORT`, `STONEPERMS_TEST_MYSQL_USER`, and
+`STONEPERMS_TEST_MYSQL_PASSWORD`. They create and remove uniquely named test databases, so use
+a test account with database creation privileges. Run `python -m unittest discover -s tests -v`.
+Without these environment variables, the SQLite tests run and MySQL integration tests are skipped.
+
 ## Offline operation and data ownership
 
-StonePerms does not require a website or internet connection. Permission data lives in the plugin's
-SQLite database. The resolver applies defined values to one native Endstone attachment per online
+StonePerms does not require a website. The default SQLite backend also works without a network
+connection; MySQL requires access to the configured database. Permission data lives in the selected
+database. The resolver applies defined values to one native Endstone attachment per online
 player and omits undefined permissions so Endstone's registered default remains effective.
 
 ## Project layout

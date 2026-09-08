@@ -111,7 +111,8 @@ def log_startup_report(
 
     if not settings.startup.show_summary:
         plugin.logger.info(
-            f"StonePerms v{plugin.version} ready with SQLite storage and default group "
+            f"StonePerms v{plugin.version} ready with "
+            f"{'MySQL' if settings.storage_backend == 'mysql' else 'SQLite'} storage and default group "
             f"{settings.default_group!r}"
         )
         _log_notices(plugin, report, divider)
@@ -128,7 +129,8 @@ def log_startup_report(
     _log_row(
         plugin,
         "Data",
-        f"SQLite  |  Default: {settings.default_group}  |  "
+        f"{'MySQL' if settings.storage_backend == 'mysql' else 'SQLite'}  |  "
+        f"Default: {settings.default_group}  |  "
         f"{_count(groups, 'group')}  |  {_count(tracks, 'track')}",
     )
     _log_row(

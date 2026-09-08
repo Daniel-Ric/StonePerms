@@ -691,11 +691,12 @@ class StonePermsManager:
     def _snapshot(self, user: SubjectRef) -> PermissionSnapshot:
         if user.type is not SubjectType.USER:
             raise ValueError("Permission checks require a user subject")
+        revision = self._repository.revision
         cached = self._snapshot_cache.get(user.identifier)
-        if cached is not None and cached[0] == self._repository.revision:
+        if cached is not None and cached[0] == revision:
             return cached[1]
         snapshot = self._repository.load_snapshot(user, self._default_group)
-        self._snapshot_cache[user.identifier] = (self._repository.revision, snapshot)
+        self._snapshot_cache[user.identifier] = (revision, snapshot)
         return snapshot
 
     def _validate_editor_nodes(

@@ -1,8 +1,20 @@
 debug = false
 
 [storage]
-# SQLite database stored in the StonePerms plugin folder.
+backend = "sqlite"
 database = "stoneperms.db"
+server_id = ""
+sync_ticks = 20
+
+[storage.mysql]
+host = "127.0.0.1"
+port = 3306
+database = "stoneperms"
+username = "stoneperms"
+password = ""
+connect_timeout = 5
+read_timeout = 10
+ssl_ca = ""
 
 [permissions]
 # Group every player receives automatically.

@@ -64,6 +64,9 @@ class PermissionRepository(Protocol):
     def close(self) -> None:
         pass
 
+    def refresh(self) -> bool:
+        pass
+
     def upsert_user(self, user: UserRecord) -> None:
         pass
 

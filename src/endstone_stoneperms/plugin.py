@@ -6,7 +6,8 @@ from endstone.plugin import Plugin, ServicePriority
 
 from .application.editor import StonePermsEditorProtocol
 from .application.manager import StonePermsManager
-from .infrastructure.sqlite_repository import SqlitePermissionRepository
+from .application.ports import PermissionRepository
+from .infrastructure.repository import create_repository
 from .platform.attachments import AttachmentManager
 from .platform.command_schema import COMMAND_USAGES, build_command_usages
 from .platform.commands import StonePermsCommandRouter
@@ -51,7 +52,7 @@ class StonePermsPlugin(Plugin):
     def __init__(self) -> None:
         super().__init__()
         self._settings: StonePermsSettings | None = None
-        self._repository: SqlitePermissionRepository | None = None
+        self._repository: PermissionRepository | None = None
         self._manager: StonePermsManager | None = None
         self._contexts: EndstoneContextCalculator | None = None
         self._attachments: AttachmentManager | None = None
@@ -63,15 +64,14 @@ class StonePermsPlugin(Plugin):
         self._forms: StonePermsFormController | None = None
         self._papi: StonePermsPapiBridge | None = None
         self._web: StonePermsWebConnector | None = None
+        self._storage_sync_pending = False
 
     def on_load(self) -> None:
-        repository: SqlitePermissionRepository | None = None
+        repository: PermissionRepository | None = None
         try:
             self.save_default_config()
             settings = load_settings(self.config)
-            repository = SqlitePermissionRepository(
-                Path(self.data_folder) / settings.database_file
-            )
+            repository = create_repository(settings, Path(self.data_folder))
             repository.initialize(settings.default_group)
             usages = build_command_usages(
                 group_names=(group.name for group in repository.list_groups()),
@@ -98,7 +98,7 @@ class StonePermsPlugin(Plugin):
     def on_enable(self) -> None:
         self.save_default_config()
         settings = load_settings(self.config)
-        repository = SqlitePermissionRepository(Path(self.data_folder) / settings.database_file)
+        repository = create_repository(settings, Path(self.data_folder))
         repository.initialize(settings.default_group)
         manager = StonePermsManager(repository, default_group=settings.default_group)
         contexts = EndstoneContextCalculator(settings)
@@ -161,6 +161,13 @@ class StonePermsPlugin(Plugin):
             period=settings.expiry_check_ticks,
         )
         web.start()
+        if settings.storage_backend == "mysql":
+            self.server.scheduler.run_task(
+                self,
+                self._sync_storage,
+                delay=settings.storage_sync_ticks,
+                period=settings.storage_sync_ticks,
+            )
         self.server.scheduler.run_task(
             self,
             attachments.refresh_permission_catalog,
@@ -231,3 +238,15 @@ class StonePermsPlugin(Plugin):
             self._attachments.refresh_all()
             if self._settings is not None and self._settings.debug:
                 self.logger.info(f"Expired {expired.count} temporary permission node(s)")
+
+    def _sync_storage(self) -> None:
+        if self._repository is None or self._attachments is None:
+            return
+        try:
+            if self._repository.refresh():
+                self._storage_sync_pending = True
+            if self._storage_sync_pending:
+                self._attachments.refresh_all()
+                self._storage_sync_pending = False
+        except Exception as exc:
+            self.logger.warning(f"Could not synchronize permission storage: {exc}")
