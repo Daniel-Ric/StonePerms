@@ -20,7 +20,7 @@
     "echarts": "^6.1.0",
     "gsap": "^3.15.0",
     "pinia": "^4.0.2",
-    "vue": "^3.5.40",
+    "vue": "^3.5.43",
     "vue-router": "^5.3.1"
   },
   "devDependencies": {
