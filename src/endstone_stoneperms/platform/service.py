@@ -301,6 +301,96 @@ class StonePermsService(Service):
     ) -> bool:
         return self.check_permission(subject, permission, contexts).value is True
 
+    def add_permission(
+        self,
+        subject: SubjectLike,
+        permission: str,
+        value: bool = True,
+        *,
+        actor: str,
+        contexts: ContextSet | None = None,
+        expires_at: int | None = None,
+    ) -> Node:
+        if not isinstance(value, bool):
+            raise TypeError("Permission value must be a bool")
+        reference = self._resolve_reference(subject)
+        node = self._manager.set_permission(
+            reference,
+            permission,
+            value,
+            actor=actor,
+            contexts=contexts,
+            expires_at=expires_at,
+        )
+        self._notify_user_change(reference, True)
+        return node
+
+    def remove_permission(
+        self,
+        subject: SubjectLike,
+        permission: str,
+        *,
+        actor: str,
+        contexts: ContextSet | None = None,
+        temporary: bool | None = False,
+    ) -> int:
+        reference = self._resolve_reference(subject)
+        removed = self._manager.unset_permission(
+            reference,
+            permission,
+            actor=actor,
+            contexts=contexts,
+            temporary=temporary,
+        )
+        self._notify_user_change(reference, removed > 0)
+        return removed
+
+    def add_group_permission(
+        self,
+        group: str,
+        permission: str,
+        value: bool = True,
+        *,
+        actor: str,
+        contexts: ContextSet | None = None,
+        expires_at: int | None = None,
+    ) -> Node:
+        if not isinstance(value, bool):
+            raise TypeError("Permission value must be a bool")
+        reference = self._manager.group_subject(group)
+        node = self._manager.set_permission(
+            reference,
+            permission,
+            value,
+            actor=actor,
+            contexts=contexts,
+            expires_at=expires_at,
+        )
+        if self._on_editor_change is not None:
+            self._on_editor_change()
+        return node
+
+    def remove_group_permission(
+        self,
+        group: str,
+        permission: str,
+        *,
+        actor: str,
+        contexts: ContextSet | None = None,
+        temporary: bool | None = False,
+    ) -> int:
+        reference = self._manager.group_subject(group)
+        removed = self._manager.unset_permission(
+            reference,
+            permission,
+            actor=actor,
+            contexts=contexts,
+            temporary=temporary,
+        )
+        if removed and self._on_editor_change is not None:
+            self._on_editor_change()
+        return removed
+
     def get_groups(
         self, subject: SubjectLike, contexts: ContextSet | None = None
     ) -> tuple[str, ...]:
@@ -426,16 +516,22 @@ class StonePermsService(Service):
     def _resolve_subject(
         self, subject: SubjectLike, contexts: ContextSet | None
     ) -> tuple[SubjectRef, ContextSet]:
+        reference = self._resolve_reference(subject)
         if isinstance(subject, Player):
-            return player_subject(subject), contexts or self._contexts.calculate(subject)
+            return reference, contexts or self._contexts.calculate(subject)
+        return reference, contexts or ContextSet()
+
+    def _resolve_reference(self, subject: SubjectLike) -> SubjectRef:
+        if isinstance(subject, Player):
+            return player_subject(subject)
         if isinstance(subject, str):
-            return self._manager.user_subject(subject), contexts or ContextSet()
+            return self._manager.user_subject(subject)
         unique_id = getattr(subject, "unique_id", None)
         if unique_id is not None:
-            return self._manager.user_subject(str(unique_id)), contexts or ContextSet()
+            return self._manager.user_subject(str(unique_id))
         name = getattr(subject, "name", None)
         if name:
-            return self._manager.user_subject(str(name)), contexts or ContextSet()
+            return self._manager.user_subject(str(name))
         raise LookupError("Placeholder subject has no known StonePerms identity")
 
 
