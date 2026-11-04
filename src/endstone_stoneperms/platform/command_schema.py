@@ -131,6 +131,10 @@ class _UsageBuilder:
         suffix = f" {' '.join(parameters)}" if parameters else ""
         self.usages.append(f"/stoneperms{suffix}")
 
+    def add_with_arguments(self, *parameters: str) -> None:
+        self.add(*parameters)
+        self.add(*parameters, "<arguments: message>")
+
 
 def build_command_usages(
     *,
@@ -148,28 +152,25 @@ def build_command_usages(
     )
     builder.add(builder.choice("info", "form", "gui", parameter="root"))
     builder.add(builder.choice("log", parameter="root"), "[limit: int]")
-    builder.add(
+    builder.add(builder.choice("web", parameter="root"))
+    builder.add_with_arguments(
         builder.choice("web", parameter="root"),
         builder.choice(
-            "dashboard", "login", "status", "pair", "unpair", parameter="action", optional=True
+            "dashboard", "login", "status", "pair", "unpair", parameter="action"
         ),
-        "[arguments: message]",
     )
-    builder.add(
+    builder.add_with_arguments(
         builder.choice("group", parameter="root"),
         builder.choice(*groups, parameter="action_or_group"),
-        "[arguments: message]",
     )
-    builder.add(
+    builder.add_with_arguments(
         builder.choice("user", parameter="root"),
         "<player: player>",
         builder.choice(*USER_ACTIONS, parameter="action"),
-        "[arguments: message]",
     )
-    builder.add(
+    builder.add_with_arguments(
         builder.choice("track", parameter="root"),
         builder.choice(*tracks, parameter="action_or_track"),
-        "[arguments: message]",
     )
     return tuple(builder.usages)
 
