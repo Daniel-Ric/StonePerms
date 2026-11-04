@@ -975,7 +975,16 @@ class StonePermsCommandRouter:
 
 
 def _command_tokens(args: Sequence[object]) -> list[str]:
-    return [piece for value in args for piece in shlex.split(str(value))]
+    if not args:
+        return []
+    header_length = 3 if str(args[0]).casefold() == "user" else 2
+    tokens = [str(value) for value in args[:header_length]]
+    if tokens[0].casefold() == "user" and len(tokens) > 1:
+        name = tokens[1]
+        if len(name) >= 2 and name[0] == name[-1] == '"':
+            tokens[1] = name[1:-1]
+    tokens.extend(piece for value in args[header_length:] for piece in shlex.split(str(value)))
+    return tokens
 
 
 def _normalize_subject_action(tokens: list[str], actions: set[str]) -> list[str]:
