@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="StonePerms 0.9.0" src="https://img.shields.io/badge/StonePerms-0.9.0-d8d58d?style=flat-square">
+  <img alt="StonePerms 0.9.1" src="https://img.shields.io/badge/StonePerms-0.9.1-d8d58d?style=flat-square">
   <a href="https://endstone.dev/"><img alt="Endstone 0.11" src="https://img.shields.io/badge/Endstone-0.11-d8d58d?style=flat-square"></a>
   <img alt="Python 3.11 or newer" src="https://img.shields.io/badge/Python-3.11%2B-68737a?style=flat-square&logo=python&logoColor=white">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-68737a?style=flat-square"></a>
@@ -53,7 +53,7 @@ temporary-node expiry.
 ## Requirements
 
 - Python 3.11 or newer
-- Endstone 0.11.x
+- Endstone 0.11.15 (plugin API 0.11)
 - Optional: [Endstone PAPI](https://github.com/EndstoneMC/papi) for placeholders
 - `websocket-client` (installed automatically with the Python package) when the web bridge is used
 - Node.js 22.13+ or Docker only when self-hosting the optional API
@@ -98,6 +98,18 @@ stoneperms user Steve check example.command.kick
 
 Users must have joined at least once before they can be addressed by their last known name. UUID is
 the canonical identity; XUID and name are lookup aliases.
+
+Use double quotes around gamertags containing spaces, including for stored offline players:
+
+```text
+/sp user "dead hi" parent add moderator
+/sp user "dead hi" info
+```
+
+StonePerms 0.9.1 preserves names parsed by Endstone and uses separate command overloads with and
+without trailing arguments. This avoids the `Command version mismatch` error on commands such as
+`sp web login` caused by Endstone's optional-message registration behavior
+([Endstone issue #559](https://github.com/EndstoneMC/endstone/issues/559)).
 
 ## Commands
 
@@ -214,9 +226,54 @@ positions = service.get_user_tracks(player)
 result = service.promote(player, "staff", actor="MyPlugin")
 result = service.demote(player, "staff", actor="MyPlugin")
 
+node = service.add_permission(player, "example.fly", actor="MyPlugin")
+removed = service.remove_permission(player, "example.fly", actor="MyPlugin")
+node = service.add_group_permission("moderator", "example.fly", actor="MyPlugin")
+removed = service.remove_group_permission("moderator", "example.fly", actor="MyPlugin")
+
 session = service.create_editor_session(actor="admin:stable-id", users=("Steve",))
 result = service.apply_editor_changes(changeset, actor="admin:stable-id")
 ```
+
+Direct permission methods are available from StonePerms 0.9.1 through the same
+`stoneperms.permissions.v1` service. Call them on Endstone's server thread. User methods accept a
+`Player`, `OfflinePlayer`, UUID string, XUID string, or stored player name (including spaces).
+Group methods accept the name of an existing permission group. Unknown users or groups raise
+`LookupError`; the methods do not create subjects.
+
+| Method | Result |
+| --- | --- |
+| `add_permission(subject, permission, value=True, *, actor, contexts=None, expires_at=None)` | Saved `Node` |
+| `remove_permission(subject, permission, *, actor, contexts=None, temporary=False)` | Number of direct nodes removed |
+| `add_group_permission(group, permission, value=True, *, actor, contexts=None, expires_at=None)` | Saved `Node` |
+| `remove_group_permission(group, permission, *, actor, contexts=None, temporary=False)` | Number of direct nodes removed |
+
+`add_*` sets or replaces a direct permission at the matching scope and permanent/temporary kind.
+Pass `False` to deny a permission explicitly; `value` must be a Python `bool`. Omitted `contexts`
+mean global scope, including when passing an online `Player`. Pass a `ContextSet` for a scoped
+permission, and a future Unix timestamp in seconds as `expires_at` for a temporary permission:
+
+```python
+import time
+from endstone_stoneperms.domain.model import ContextSet
+
+lobby = ContextSet.parse("server=lobby")
+service.add_permission(
+    "dead hi", "example.fly", False, actor="MyPlugin", contexts=lobby,
+    expires_at=int(time.time()) + 3600,
+)
+service.remove_permission(
+    "dead hi", "example.fly", actor="MyPlugin", contexts=lobby, temporary=True,
+)
+```
+
+Removal matches the exact permission and context set. `temporary=False` removes permanent nodes,
+`True` removes temporary nodes, and `None` removes both kinds. Removing an absent node returns `0`.
+Removing a direct node can reveal an inherited permission; it does not revoke inherited nodes.
+Invalid permission syntax raises `ValueError`. Changes are persisted and audited with `actor`;
+user changes refresh that player's permissions, while group changes refresh all online players
+to update inherited permissions. For atomic changes across multiple subjects, keep using
+`create_editor_session()` and `apply_editor_changes()`.
 
 Minigame and region plugins can contribute dynamic contexts:
 
