@@ -16,12 +16,12 @@
     "check": "npm run lint && npm run format:check && npm run build"
   },
   "dependencies": {
-    "axios": "^1.19.0",
+    "axios": "^1.21.1",
     "echarts": "^6.1.0",
-    "gsap": "^3.15.0",
+    "gsap": "^3.15.1",
     "pinia": "^4.1.0",
-    "vue": "^3.5.44",
-    "vue-router": "^5.4.0"
+    "vue": "^3.5.45",
+    "vue-router": "^5.5.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
